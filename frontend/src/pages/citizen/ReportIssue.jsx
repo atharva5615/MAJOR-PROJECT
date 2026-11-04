@@ -1,6 +1,6 @@
 
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
   Upload,
@@ -24,6 +24,7 @@ function ReportIssue() {
   const [preview, setPreview] = useState(null);
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationError, setLocationError] = useState("");
+  const navigate = useNavigate();
 
   // Handle text and select inputs
   const handleChange = (e) => {
@@ -118,25 +119,27 @@ function ReportIssue() {
 
   // Submit complaint (frontend demonstration)
   const handleSubmit = (e) => {
-    e.preventDefault();
+  e.preventDefault();
 
-    if (!image) {
-      alert("Please upload an image of the civic issue.");
-      return;
-    }
+  if (!image) {
+    alert("Please upload an issue image.");
+    return;
+  }
 
-    if (!formData.latitude || !formData.longitude) {
-      alert("Please provide the issue location.");
-      return;
-    }
+  if (!formData.latitude || !formData.longitude) {
+    alert("Please provide your issue location.");
+    return;
+  }
 
-    console.log("Complaint details:", {
-      ...formData,
-      image,
-    });
-
-    alert("Complaint form validated! Backend submission will be added later.");
-  };
+  navigate("/ai-results", {
+    state: {
+      category: formData.category,
+      description: formData.description,
+      latitude: formData.latitude,
+      longitude: formData.longitude,
+    },
+  });
+};
 
   return (
     <div className="min-h-screen bg-slate-50">

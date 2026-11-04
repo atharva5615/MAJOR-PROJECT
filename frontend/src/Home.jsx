@@ -1,4 +1,4 @@
-
+import { Link } from "react-router-dom";
 import {
   MapPin,
   Camera,
@@ -54,14 +54,20 @@ function App() {
         </div>
 
         <div className="flex gap-3">
-          <button className="px-4 py-2 text-blue-700 font-medium">
-            Login
-          </button>
+  <Link
+    to="/login"
+    className="px-4 py-2 text-blue-700 font-medium hover:text-blue-900"
+  >
+    Login
+  </Link>
 
-          <button className="rounded-lg bg-blue-600 px-5 py-2 text-white hover:bg-blue-700">
-            Register
-          </button>
-        </div>
+  <Link
+    to="/register"
+    className="rounded-lg bg-blue-600 px-5 py-2 text-white hover:bg-blue-700"
+  >
+    Register
+  </Link>
+</div>
       </nav>
 
       {/* Hero Section */}

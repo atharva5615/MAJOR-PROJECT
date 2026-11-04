@@ -107,13 +107,12 @@ function Dashboard() {
             Dashboard
           </Link>
 
-          <a
-            href="#complaints"
-            className="flex items-center gap-3 rounded-lg px-4 py-3 text-slate-600 hover:bg-slate-100"
-          >
-            <FileText size={19} />
-            My Complaints
-          </a>
+          <Link
+  to="/my-complaints"
+  className="flex items-center gap-3 rounded-lg px-4 py-3 text-slate-600 hover:bg-blue-50 hover:text-blue-700"
+>
+  My Complaints
+</Link>
 
           <Link
             to="/report-issue"
