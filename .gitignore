@@ -1,0 +1,37 @@
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+.pytest_cache/
+
+# Node
+node_modules/
+dist/
+
+# IDE
+.vscode/
+.idea/
+
+# Operating system
+.DS_Store
+Thumbs.db
+
+# AI model weights
+*.pt
+*.onnx
+*.pth
+
+# Datasets and temporary uploads
+ai-engine/datasets/*
+!ai-engine/datasets/.gitkeep
+uploads/
+temp/
+
+# Logs
+*.log
