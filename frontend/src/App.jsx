@@ -9,6 +9,9 @@ import ReportIssue from "./pages/citizen/ReportIssue";
 import AIResults from "./pages/citizen/AIResults";
 import MyComplaints from "./pages/citizen/MyComplaints";
 import ComplaintDetails from "./pages/citizen/ComplaintDetails";
+import AdminDashboard from "./pages/admin/AdminDashboard";
+import ComplaintReview from "./pages/admin/ComplaintReview";
+import DuplicateReview from "./pages/admin/DuplicateReview";
 
 function App() {
   return (
@@ -22,6 +25,9 @@ function App() {
         <Route path="/ai-results" element={<AIResults />} />
         <Route path="/my-complaints" element={<MyComplaints />} />
         <Route path="/complaint/:id" element={<ComplaintDetails />}/>
+        <Route path="/admin/dashboard" element={<AdminDashboard />} />
+        <Route path="/admin/complaints/:id" element={<ComplaintReview />}/>
+        <Route path="/admin/duplicates/:id" element={<DuplicateReview />}/>
       </Routes>
     </BrowserRouter>
   );
