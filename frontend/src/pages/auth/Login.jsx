@@ -1,12 +1,16 @@
 
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { ShieldCheck, Mail, Lock } from "lucide-react";
 
 function Login() {
+  const navigate = useNavigate();
   const handleSubmit = (e) => {
-    e.preventDefault();
-    alert("Login API integration will be added later.");
-  };
+  e.preventDefault();
+
+  alert("Login successful!");
+
+  navigate("/dashboard");
+};
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
