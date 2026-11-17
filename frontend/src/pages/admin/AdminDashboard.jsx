@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -15,75 +15,127 @@ import {
   X,
   Filter,
   Eye,
-  Building2,
   TrendingUp,
 } from "lucide-react";
+import api from "../../services/api";
 
 function AdminDashboard() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("All");
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // Temporary demonstration data.
-  // Later, this will come from the FastAPI backend.
-  const complaints = [
-    {
-      id: "CIV-2026-001",
-      title: "Large pothole near main road",
-      category: "Road Damage",
-      location: "Pune, Maharashtra",
-      date: "04 Nov 2026",
-      priority: "High",
-      aiScore: 85,
-      status: "In Progress",
-    },
-    {
-      id: "CIV-2026-002",
-      title: "Garbage accumulation near residential area",
-      category: "Garbage",
-      location: "Pune, Maharashtra",
-      date: "02 Nov 2026",
-      priority: "Medium",
-      aiScore: 52,
-      status: "Pending",
-    },
-    {
-      id: "CIV-2026-003",
-      title: "Streetlight not working",
-      category: "Streetlight",
-      location: "Pune, Maharashtra",
-      date: "30 Oct 2026",
-      priority: "Low",
-      aiScore: 28,
-      status: "Resolved",
-    },
-    {
-      id: "CIV-2026-004",
-      title: "Water leakage on roadside",
-      category: "Water Leakage",
-      location: "Pune, Maharashtra",
-      date: "28 Oct 2026",
-      priority: "Critical",
-      aiScore: 91,
-      status: "Pending",
-    },
-  ];
+  const [complaints, setComplaints] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
+  // Fetch complaints from FastAPI
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchComplaints = async () => {
+      try {
+        setLoading(true);
+        setError("");
+
+        const response = await api.get("/issues/", {
+          params: { limit: 100 },
+        });
+
+        if (!cancelled) {
+          setComplaints(response.data);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          const detail = err.response?.data?.detail;
+
+          setError(
+            typeof detail === "string"
+              ? detail
+              : "Unable to load complaints. Please try again."
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    fetchComplaints();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Convert backend status into dashboard labels
+  const getDisplayStatus = (status) => {
+    const normalized = status?.toLowerCase();
+
+    if (normalized === "reported") return "Pending";
+    if (normalized === "in_progress") return "In Progress";
+    if (normalized === "resolved") return "Resolved";
+
+    return status || "Unknown";
+  };
+
+  // Format priority
+  const getDisplayPriority = (priority) => {
+    return priority
+      ? priority.charAt(0).toUpperCase() +
+          priority.slice(1).toLowerCase()
+      : "Unknown";
+  };
+
+  // Generate readable complaint reference
+  // Database ID remains the actual API identifier
+  const getComplaintReference = (complaint) => {
+    const year = complaint.created_at
+      ? new Date(complaint.created_at).getFullYear()
+      : new Date().getFullYear();
+
+    return `CIV-${year}-${String(complaint.id).padStart(3, "0")}`;
+  };
+
+  // Format complaint location
+  const getComplaintLocation = (complaint) => {
+    if (complaint.address) {
+      return complaint.address;
+    }
+
+    if (
+      complaint.latitude != null &&
+      complaint.longitude != null
+    ) {
+      return `${complaint.latitude}, ${complaint.longitude}`;
+    }
+
+    return "Location unavailable";
+  };
+
+  // Filter complaints
   const filteredComplaints = complaints.filter((complaint) => {
+    const reference = getComplaintReference(complaint);
+
     const matchesSearch =
-      complaint.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      complaint.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      complaint.category.toLowerCase().includes(searchTerm.toLowerCase());
+      reference.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (complaint.title || "")
+        .toLowerCase()
+        .includes(searchTerm.toLowerCase()) ||
+      (complaint.category || "")
+        .toLowerCase()
+        .includes(searchTerm.toLowerCase());
 
     const matchesStatus =
       selectedStatus === "All" ||
-      complaint.status === selectedStatus;
+      getDisplayStatus(complaint.status) === selectedStatus;
 
     return matchesSearch && matchesStatus;
   });
 
+  // Priority styling
   const getPriorityStyle = (priority) => {
-    switch (priority) {
+    switch (getDisplayPriority(priority)) {
       case "Critical":
         return "bg-red-100 text-red-700";
       case "High":
@@ -97,6 +149,7 @@ function AdminDashboard() {
     }
   };
 
+  // Status styling
   const getStatusStyle = (status) => {
     switch (status) {
       case "Pending":
@@ -110,6 +163,7 @@ function AdminDashboard() {
     }
   };
 
+  // Calculate statistics from actual complaints
   const stats = [
     {
       title: "Total Complaints",
@@ -120,26 +174,36 @@ function AdminDashboard() {
     },
     {
       title: "Pending",
-      value: complaints.filter((c) => c.status === "Pending").length,
+      value: complaints.filter(
+        (c) => getDisplayStatus(c.status) === "Pending"
+      ).length,
       icon: Clock,
       color: "text-yellow-600",
       bg: "bg-yellow-50",
     },
     {
       title: "In Progress",
-      value: complaints.filter((c) => c.status === "In Progress").length,
+      value: complaints.filter(
+        (c) => getDisplayStatus(c.status) === "In Progress"
+      ).length,
       icon: TrendingUp,
       color: "text-indigo-600",
       bg: "bg-indigo-50",
     },
     {
       title: "Resolved",
-      value: complaints.filter((c) => c.status === "Resolved").length,
+      value: complaints.filter(
+        (c) => getDisplayStatus(c.status) === "Resolved"
+      ).length,
       icon: CheckCircle,
       color: "text-green-600",
       bg: "bg-green-50",
     },
   ];
+
+  const criticalCount = complaints.filter(
+    (c) => getDisplayPriority(c.priority) === "Critical"
+  ).length;
 
   return (
     <div className="min-h-screen bg-slate-100 md:flex">
@@ -160,7 +224,9 @@ function AdminDashboard() {
       >
         <div className="flex items-center justify-between border-b border-slate-800 px-6 py-6">
           <div>
-            <h1 className="text-2xl font-bold text-blue-400">CivicAI</h1>
+            <h1 className="text-2xl font-bold text-blue-400">
+              CivicAI
+            </h1>
             <p className="mt-1 text-xs text-slate-400">
               Authority Portal
             </p>
@@ -213,13 +279,18 @@ function AdminDashboard() {
             Account
           </div>
 
-          <Link
-            to="/"
-            className="flex items-center gap-3 rounded-lg px-4 py-3 text-slate-300 transition hover:bg-slate-800"
+          <button
+            type="button"
+            onClick={() => {
+              localStorage.removeItem("access_token");
+              localStorage.removeItem("user");
+              window.location.href = "/login";
+            }}
+            className="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-slate-300 transition hover:bg-slate-800"
           >
             <LogOut size={19} />
-            Back to Home
-          </Link>
+            Logout
+          </button>
 
         </nav>
 
@@ -229,8 +300,12 @@ function AdminDashboard() {
               A
             </div>
             <div>
-              <p className="text-sm font-semibold">Administrator</p>
-              <p className="text-xs text-slate-400">Authority Account</p>
+              <p className="text-sm font-semibold">
+                Administrator
+              </p>
+              <p className="text-xs text-slate-400">
+                Authority Account
+              </p>
             </div>
           </div>
         </div>
@@ -302,7 +377,7 @@ function AdminDashboard() {
                         {stat.title}
                       </p>
                       <h3 className="mt-2 text-3xl font-bold text-slate-900">
-                        {stat.value}
+                        {loading ? "—" : stat.value}
                       </h3>
                     </div>
 
@@ -329,7 +404,7 @@ function AdminDashboard() {
                     Critical Complaints
                   </p>
                   <h3 className="text-2xl font-bold text-slate-900">
-                    {complaints.filter((c) => c.priority === "Critical").length}
+                    {loading ? "—" : criticalCount}
                   </h3>
                 </div>
               </div>
@@ -342,11 +417,14 @@ function AdminDashboard() {
                 </div>
                 <div>
                   <p className="text-sm text-slate-500">
-                    Total Supporting Citizens
+                    Supporting Citizens
                   </p>
                   <h3 className="text-2xl font-bold text-slate-900">
-                    28
+                    N/A
                   </h3>
+                  <p className="text-xs text-slate-400">
+                    Not provided by current API
+                  </p>
                 </div>
               </div>
             </div>
@@ -407,98 +485,125 @@ function AdminDashboard() {
               </div>
             </div>
 
+            {/* Loading State */}
+            {loading && (
+              <p className="p-8 text-center text-slate-500">
+                Loading complaints...
+              </p>
+            )}
+
+            {/* Error State */}
+            {error && (
+              <div className="m-6 rounded-lg bg-red-50 p-4 text-red-700">
+                {error}
+                <button
+                  type="button"
+                  onClick={() => window.location.reload()}
+                  className="ml-3 font-semibold underline"
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+
             {/* Complaints Table */}
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[850px] text-left">
+            {!loading && !error && (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[850px] text-left">
 
-                <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-                  <tr>
-                    <th className="px-6 py-4">Complaint</th>
-                    <th className="px-6 py-4">Category</th>
-                    <th className="px-6 py-4">Priority</th>
-                    <th className="px-6 py-4">AI Score</th>
-                    <th className="px-6 py-4">Status</th>
-                    <th className="px-6 py-4">Action</th>
-                  </tr>
-                </thead>
-
-                <tbody className="divide-y divide-slate-100">
-
-                  {filteredComplaints.map((complaint) => (
-                    <tr key={complaint.id} className="hover:bg-slate-50">
-
-                      <td className="px-6 py-4">
-                        <p className="font-semibold text-slate-900">
-                          {complaint.id}
-                        </p>
-                        <p className="mt-1 text-sm text-slate-500">
-                          {complaint.title}
-                        </p>
-                        <p className="mt-1 flex items-center gap-1 text-xs text-slate-400">
-                          <MapPin size={13} />
-                          {complaint.location}
-                        </p>
-                      </td>
-
-                      <td className="px-6 py-4 text-sm text-slate-600">
-                        {complaint.category}
-                      </td>
-
-                      <td className="px-6 py-4">
-                        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${getPriorityStyle(complaint.priority)}`}>
-                          {complaint.priority}
-                        </span>
-                      </td>
-
-                      <td className="px-6 py-4">
-                        <p className="font-semibold text-slate-800">
-                          {complaint.aiScore}/100
-                        </p>
-                      </td>
-
-                      <td className="px-6 py-4">
-                        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${getStatusStyle(complaint.status)}`}>
-                          {complaint.status}
-                        </span>
-                      </td>
-
-                      <td className="px-6 py-4">
-                        <Link
-  to={`/admin/complaints/${complaint.id}`}
-  className="flex items-center gap-2 rounded-lg border border-blue-600 px-3 py-2 text-sm font-semibold text-blue-600 hover:bg-blue-50"
->
-  <Eye size={16} />
-  Review
-</Link>
-                      </td>
-
-                    </tr>
-                  ))}
-
-                  {filteredComplaints.length === 0 && (
+                  <thead className="bg-slate-50 text-xs uppercase text-slate-500">
                     <tr>
-                      <td
-                        colSpan="6"
-                        className="px-6 py-12 text-center text-slate-500"
-                      >
-                        No complaints found.
-                      </td>
+                      <th className="px-6 py-4">Complaint</th>
+                      <th className="px-6 py-4">Category</th>
+                      <th className="px-6 py-4">Priority</th>
+                      <th className="px-6 py-4">AI Score</th>
+                      <th className="px-6 py-4">Status</th>
+                      <th className="px-6 py-4">Action</th>
                     </tr>
-                  )}
+                  </thead>
 
-                </tbody>
-              </table>
-            </div>
+                  <tbody className="divide-y divide-slate-100">
+
+                    {filteredComplaints.map((complaint) => (
+                      <tr key={complaint.id} className="hover:bg-slate-50">
+
+                        <td className="px-6 py-4">
+                          <p className="font-semibold text-slate-900">
+                            {getComplaintReference(complaint)}
+                          </p>
+                          <p className="mt-1 text-sm text-slate-500">
+                            {complaint.title}
+                          </p>
+                          <p className="mt-1 flex items-center gap-1 text-xs text-slate-400">
+                            <MapPin size={13} />
+                            {getComplaintLocation(complaint)}
+                          </p>
+                        </td>
+
+                        <td className="px-6 py-4 text-sm text-slate-600">
+                          {complaint.category}
+                        </td>
+
+                        <td className="px-6 py-4">
+                          <span
+                            className={`rounded-full px-3 py-1 text-xs font-semibold ${getPriorityStyle(complaint.priority)}`}
+                          >
+                            {getDisplayPriority(complaint.priority)}
+                          </span>
+                        </td>
+
+                        <td className="px-6 py-4">
+                          <p className="font-semibold text-slate-500">
+                            N/A
+                          </p>
+                        </td>
+
+                        <td className="px-6 py-4">
+                          <span
+                            className={`rounded-full px-3 py-1 text-xs font-semibold ${getStatusStyle(getDisplayStatus(complaint.status))}`}
+                          >
+                            {getDisplayStatus(complaint.status)}
+                          </span>
+                        </td>
+
+                        <td className="px-6 py-4">
+                          <Link
+                            to={`/admin/complaints/${complaint.id}`}
+                            className="flex items-center gap-2 rounded-lg border border-blue-600 px-3 py-2 text-sm font-semibold text-blue-600 hover:bg-blue-50"
+                          >
+                            <Eye size={16} />
+                            Review
+                          </Link>
+                        </td>
+
+                      </tr>
+                    ))}
+
+                    {filteredComplaints.length === 0 && (
+                      <tr>
+                        <td
+                          colSpan="6"
+                          className="px-6 py-12 text-center text-slate-500"
+                        >
+                          No complaints found.
+                        </td>
+                      </tr>
+                    )}
+
+                  </tbody>
+                </table>
+              </div>
+            )}
 
           </section>
 
           {/* Information */}
           <div className="mt-6 rounded-xl border border-blue-100 bg-blue-50 p-4">
             <p className="text-sm leading-6 text-blue-800">
-              <strong>Demonstration:</strong> Complaint information,
-              AI scores and statistics shown here are sample data.
-              Real complaint management will be connected through
-              the FastAPI backend.
+              <strong>Live data:</strong> Complaint information,
+              priorities and statistics are retrieved from the CivicAI
+              backend. AI scores and supporting citizen counts are
+              not yet provided by the current API.
             </p>
           </div>
 
