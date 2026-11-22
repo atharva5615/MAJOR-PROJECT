@@ -23,7 +23,10 @@ function DuplicateReview() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [decision, setDecision] = useState({});
-  const [authorityNote, setAuthorityNote] = useState("");
+  const [authorityNote, setAuthorityNote] = useState({});
+  const [savingCandidate, setSavingCandidate] = useState(null);
+  const [reviewErrors, setReviewErrors] = useState({});
+  const [reviewSuccess, setReviewSuccess] = useState({});
 
   useEffect(() => {
     let cancelled = false;
@@ -33,10 +36,11 @@ function DuplicateReview() {
         setLoading(true);
         setError("");
 
-        const [complaintResponse, duplicateResponse] =
+        const [complaintResponse, duplicateResponse, reviewsResponse] =
           await Promise.all([
             api.get(`/issues/${id}`),
             api.get(`/issues/${id}/duplicates`),
+            api.get(`/issues/${id}/duplicate-reviews`),
           ]);
 
         if (cancelled) return;
@@ -47,6 +51,23 @@ function DuplicateReview() {
 
         setOriginalComplaint(complaint);
         setCandidates(matches);
+
+        // Load the latest saved decision for each candidate.
+        // The backend returns reviews newest first.
+        const savedDecisions = {};
+        const savedNotes = {};
+
+        for (const review of reviewsResponse.data) {
+          const candidateId = review.duplicate_issue_id;
+
+          if (savedDecisions[candidateId] === undefined) {
+            savedDecisions[candidateId] = review.decision;
+            savedNotes[candidateId] = review.authority_note || "";
+          }
+        }
+
+        setDecision(savedDecisions);
+        setAuthorityNote(savedNotes);
 
         const details = await Promise.all(
           matches.map(async (candidate) => {
@@ -94,12 +115,50 @@ function DuplicateReview() {
     };
   }, [id]);
 
-  const handleDecision = (candidateId, value) => {
-    setDecision((previous) => ({
+
+  const handleDecision = async (candidateId, value) => {
+    setSavingCandidate(candidateId);
+
+    setReviewErrors((previous) => ({
       ...previous,
-      [candidateId]: value,
+      [candidateId]: "",
     }));
+
+    setReviewSuccess((previous) => ({
+      ...previous,
+      [candidateId]: "",
+    }));
+
+    try {
+      const response = await api.post(
+        `/issues/${id}/duplicates/${candidateId}/review`,
+        {
+          decision: value,
+          authority_note: authorityNote[candidateId] || null,
+        }
+      );
+
+      setDecision((previous) => ({
+        ...previous,
+        [candidateId]: response.data.decision,
+      }));
+
+      setReviewSuccess((previous) => ({
+        ...previous,
+        [candidateId]: "Decision successfully saved to the database.",
+      }));
+    } catch (err) {
+      setReviewErrors((previous) => ({
+        ...previous,
+        [candidateId]:
+          err.response?.data?.detail ||
+          "Unable to save the review. Please try again.",
+      }));
+    } finally {
+      setSavingCandidate(null);
+    }
   };
+
 
   const imageUrl = (path) => {
     if (!path) return null;
@@ -253,8 +312,20 @@ function DuplicateReview() {
                   Suspected Duplicate #{candidateId}
                 </h3>
 
-                <span className="rounded-full bg-orange-100 px-3 py-1 text-sm font-semibold text-orange-700">
-                  Requires verification
+                <span
+                  className={`rounded-full px-3 py-1 text-sm font-semibold ${
+                    decision[candidateId] === "confirmed"
+                      ? "bg-green-100 text-green-700"
+                      : decision[candidateId] === "rejected"
+                        ? "bg-red-100 text-red-700"
+                        : "bg-orange-100 text-orange-700"
+                  }`}
+                >
+                  {decision[candidateId] === "confirmed"
+                    ? "Confirmed Duplicate"
+                    : decision[candidateId] === "rejected"
+                      ? "Rejected Duplicate"
+                      : "Requires verification"}
                 </span>
               </div>
 
@@ -330,9 +401,15 @@ function DuplicateReview() {
                 </label>
 
                 <textarea
-                  value={authorityNote}
-                  onChange={(event) => setAuthorityNote(event.target.value)}
+                  value={authorityNote[candidateId] || ""}
+                  onChange={(event) =>
+                    setAuthorityNote((previous) => ({
+                      ...previous,
+                      [candidateId]: event.target.value,
+                    }))
+                  }
                   rows={3}
+                  maxLength={2000}
                   placeholder="Explain your assessment..."
                   className="w-full resize-none rounded-lg border border-slate-300 px-4 py-3 outline-none focus:border-blue-600"
                 />
@@ -340,27 +417,51 @@ function DuplicateReview() {
                 <div className="mt-4 flex flex-wrap gap-3">
                   <button
                     onClick={() => handleDecision(candidateId, "confirmed")}
-                    disabled={!!decision[candidateId]}
-                    className="flex items-center gap-2 rounded-lg bg-green-600 px-5 py-3 font-semibold text-white hover:bg-green-700 disabled:opacity-50"
+                    disabled={savingCandidate === candidateId}
+                    className="flex items-center gap-2 rounded-lg bg-green-600 px-5 py-3 font-semibold text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <CheckCircle size={18} />
-                    Confirm Duplicate
+                    {savingCandidate === candidateId
+                      ? "Saving..."
+                      : decision[candidateId] === "confirmed"
+                        ? "Confirm Again"
+                        : "Confirm Duplicate"}
                   </button>
 
                   <button
                     onClick={() => handleDecision(candidateId, "rejected")}
-                    disabled={!!decision[candidateId]}
-                    className="flex items-center gap-2 rounded-lg bg-red-600 px-5 py-3 font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+                    disabled={savingCandidate === candidateId}
+                    className="flex items-center gap-2 rounded-lg bg-red-600 px-5 py-3 font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <XCircle size={18} />
-                    Reject Duplicate
+                    {savingCandidate === candidateId
+                      ? "Saving..."
+                      : decision[candidateId] === "rejected"
+                        ? "Reject Again"
+                        : "Reject Duplicate"}
                   </button>
                 </div>
 
                 {decision[candidateId] && (
-                  <p className="mt-4 rounded-lg bg-yellow-50 p-4 text-sm text-yellow-800">
-                    Demonstration decision: {decision[candidateId]}.
-                    This has not been saved to the backend.
+                  <p className="mt-4 rounded-lg bg-blue-50 p-4 text-sm text-blue-800">
+                    Current saved decision:{" "}
+                    <strong>
+                      {decision[candidateId] === "confirmed"
+                        ? "Confirmed Duplicate"
+                        : "Rejected Duplicate"}
+                    </strong>
+                  </p>
+                )}
+
+                {reviewSuccess[candidateId] && (
+                  <p className="mt-3 rounded-lg bg-green-50 p-3 text-sm text-green-700">
+                    {reviewSuccess[candidateId]}
+                  </p>
+                )}
+
+                {reviewErrors[candidateId] && (
+                  <p className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+                    {reviewErrors[candidateId]}
                   </p>
                 )}
               </div>
@@ -372,8 +473,8 @@ function DuplicateReview() {
           <p className="text-sm leading-6 text-blue-800">
             <strong>Important:</strong> AI similarity and GPS distance
             are supporting evidence, not proof of duplication.
-            Authority decisions are currently demonstration-only
-            and are not persisted.
+            Final duplicate decisions are recorded by authorized officers
+            and administrators.
           </p>
         </div>
       </main>

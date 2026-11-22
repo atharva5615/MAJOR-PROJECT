@@ -25,13 +25,22 @@ function ComplaintReview() {
   const [duplicates, setDuplicates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [aiAnalysis, setAiAnalysis] = useState(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
   const [priority, setPriority] = useState("Medium");
   const [status, setStatus] = useState("reported");
   const [department, setDepartment] = useState("");
+  const [departments, setDepartments] = useState([]);
+  const [departmentLoading, setDepartmentLoading] = useState(true);
+  const [departmentError, setDepartmentError] = useState("");
   const [authorityNote, setAuthorityNote] = useState("");
+  const [authorityNotes, setAuthorityNotes] = useState([]);
+  const [notesLoading, setNotesLoading] = useState(false);
+  const [notesError, setNotesError] = useState("");
 
   const [actionMessage, setActionMessage] = useState("");
 
@@ -107,6 +116,41 @@ function ComplaintReview() {
   useEffect(() => {
     let active = true;
 
+    const fetchDepartments = async () => {
+      setDepartmentLoading(true);
+      setDepartmentError("");
+
+      try {
+        const response = await api.get("/departments/");
+        const data = response.data;
+        const departmentList = Array.isArray(data)
+          ? data
+          : data?.departments || [];
+
+        if (active) {
+          setDepartments(departmentList);
+        }
+      } catch (err) {
+        if (active) {
+          setDepartmentError(getErrorMessage(err));
+        }
+      } finally {
+        if (active) {
+          setDepartmentLoading(false);
+        }
+      }
+    };
+
+    fetchDepartments();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
     const fetchComplaint = async () => {
       setLoading(true);
       setError("");
@@ -125,6 +169,33 @@ function ComplaintReview() {
             : "Medium"
         );
         setStatus(issue.status || "reported");
+        setDepartment(
+          issue.department_id != null ? String(issue.department_id) : ""
+        );
+        // Fetch private authority notes for this complaint.
+            setNotesLoading(true);
+            setNotesError("");
+
+            try {
+              const notesResponse = await api.get(
+                `/issues/${id}/authority-notes`
+              );
+
+              if (active) {
+                setAuthorityNotes(notesResponse.data || []);
+              }
+            } catch (noteError) {
+              console.error("Authority notes loading error:", noteError);
+
+              if (active) {
+                setNotesError(getErrorMessage(noteError));
+                setAuthorityNotes([]);
+              }
+            } finally {
+              if (active) {
+                setNotesLoading(false);
+              }
+            }
 
         // Fetch duplicate candidates for this complaint.
         try {
@@ -188,32 +259,216 @@ function ComplaintReview() {
     };
   }, [id]);
 
-  const handleSave = async (e) => {
+  useEffect(() => {
+    let active = true;
+
+    const fetchAIAnalysis = async () => {
+      setAiLoading(true);
+      setAiError("");
+      setAiAnalysis(null);
+
+      try {
+        const response = await api.get(`/ai/analysis/${id}`);
+
+        if (active) {
+          setAiAnalysis(response.data);
+        }
+      } catch (err) {
+        if (active) {
+          setAiError(getErrorMessage(err));
+        }
+      } finally {
+        if (active) {
+          setAiLoading(false);
+        }
+      }
+    };
+
+    if (id) {
+      fetchAIAnalysis();
+    }
+
+    return () => {
+      active = false;
+    };
+  }, [id]);
+
+
+const handleSave = async (e) => {
     e.preventDefault();
 
     setSaving(true);
     setSaved(false);
     setActionMessage("");
 
-    try {
-      await api.put(`/issues/${id}/status`, {
-        status,
-      });
+    const selectedPriority = priority.toLowerCase();
+    const priorityChanged =
+      selectedPriority !== complaint.priority?.toLowerCase();
 
-      // Refresh complaint data after the successful update.
+    const statusChanged = status !== complaint.status;
+    const currentDepartmentId =
+      complaint.department_id != null
+        ? String(complaint.department_id)
+        : "";
+
+    // The current API supports assigning a department, but not clearing one.
+    const departmentChanged =
+      department !== "" && department !== currentDepartmentId;
+
+    const noteMessage = authorityNote.trim();
+    const noteChanged = noteMessage.length > 0;
+
+    if (
+      !priorityChanged &&
+      !statusChanged &&
+      !departmentChanged &&
+      !noteChanged
+    ) {
+      setActionMessage("No changes to save.");
+      setSaving(false);
+      return;
+    }
+
+    let priorityUpdated = false;
+    let statusUpdated = false;
+    let departmentUpdated = false;
+    let noteAdded = false;
+
+    try {
+      if (priorityChanged) {
+        await api.put(`/issues/${id}/priority`, {
+          priority: selectedPriority,
+        });
+        priorityUpdated = true;
+      }
+
+      if (statusChanged) {
+        await api.put(`/issues/${id}/status`, { status });
+        statusUpdated = true;
+      }
+
+      if (departmentChanged) {
+        await api.put(`/issues/${id}/assign-department`, {
+          department_id: Number(department),
+        });
+        departmentUpdated = true;
+      }
+
+      // Save a new private authority note, if one was entered.
+      if (noteChanged) {
+        const noteResponse = await api.post(
+          `/issues/${id}/authority-notes`,
+          { message: noteMessage }
+        );
+
+        noteAdded = true;
+        setAuthorityNote("");
+        setAuthorityNotes((previousNotes) => [
+          ...previousNotes,
+          noteResponse.data,
+        ]);
+      }
+
+      // Refresh the complaint to reflect the latest backend values.
       const response = await api.get(`/issues/${id}`);
 
       setComplaint(response.data);
-      setStatus(response.data.status);
+      setPriority(
+        response.data.priority
+          ? response.data.priority.charAt(0).toUpperCase() +
+              response.data.priority.slice(1)
+          : "Medium"
+      );
+      setStatus(response.data.status || "reported");
+      setDepartment(
+        response.data.department_id != null
+          ? String(response.data.department_id)
+          : ""
+      );
+
+      const updatedItems = [];
+      if (priorityUpdated) updatedItems.push("priority");
+      if (statusUpdated) updatedItems.push("status");
+      if (departmentUpdated) updatedItems.push("department");
+      if (noteAdded) updatedItems.push("authority note");
 
       setSaved(true);
-      setActionMessage("Complaint status successfully updated.");
+      setActionMessage(
+        `Complaint ${updatedItems.join(", ")} successfully updated.`
+      );
+
+      // Refresh note history separately. A history-refresh failure should
+      // not make a successfully saved note appear unsuccessful.
+      if (noteAdded) {
+        try {
+          const notesResponse = await api.get(
+            `/issues/${id}/authority-notes`
+          );
+          setAuthorityNotes(notesResponse.data || []);
+          setNotesError("");
+        } catch (noteRefreshError) {
+          console.error(
+            "Authority note history refresh error:",
+            noteRefreshError
+          );
+        }
+      }
     } catch (err) {
-      setActionMessage(getErrorMessage(err));
+      // Refresh complaint data even if a later update failed.
+      try {
+        const response = await api.get(`/issues/${id}`);
+
+        setComplaint(response.data);
+        setPriority(
+          response.data.priority
+            ? response.data.priority.charAt(0).toUpperCase() +
+                response.data.priority.slice(1)
+            : "Medium"
+        );
+        setStatus(response.data.status || "reported");
+        setDepartment(
+          response.data.department_id != null
+            ? String(response.data.department_id)
+            : ""
+        );
+      } catch {
+        // Keep the original update error.
+      }
+
+      // If the note was saved before a later request failed, reload its history.
+      if (noteAdded) {
+        try {
+          const notesResponse = await api.get(
+            `/issues/${id}/authority-notes`
+          );
+          setAuthorityNotes(notesResponse.data || []);
+          setAuthorityNote("");
+        } catch (noteRefreshError) {
+          console.error(
+            "Authority note history refresh error:",
+            noteRefreshError
+          );
+        }
+      }
+
+      if (
+        priorityUpdated ||
+        statusUpdated ||
+        departmentUpdated ||
+        noteAdded
+      ) {
+        setSaved(false);
+        setActionMessage(
+          `Some changes were saved, but another update failed: ${getErrorMessage(err)}`
+        );
+      } else {
+        setActionMessage(getErrorMessage(err));
+      }
     } finally {
       setSaving(false);
     }
   };
+
 
   if (loading) {
     return (
@@ -397,39 +652,163 @@ function ComplaintReview() {
             </h3>
           </div>
 
-          <div className="grid gap-5 sm:grid-cols-3">
-            <div className="rounded-xl bg-blue-50 p-4">
-              <p className="text-sm text-slate-500">Reported Category</p>
-              <h4 className="mt-2 text-lg font-bold text-blue-700">
-                {complaint.category || "N/A"}
-              </h4>
+          {aiLoading ? (
+            <div className="flex items-center gap-2 py-6 text-slate-500">
+              <Loader2 size={20} className="animate-spin" />
+              Loading saved AI analysis...
             </div>
+          ) : aiError ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+              <p className="font-semibold text-amber-800">
+                AI analysis unavailable
+              </p>
+              <p className="mt-1 text-sm text-amber-700">{aiError}</p>
+            </div>
+          ) : aiAnalysis?.available ? (
+            <>
+              <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="rounded-xl bg-blue-50 p-4">
+                  <p className="text-sm text-slate-500">AI Detected Category</p>
+                  <h4 className="mt-2 text-lg font-bold text-blue-700">
+                    {aiAnalysis.detected_category || "N/A"}
+                  </h4>
+                </div>
 
-            <div className="rounded-xl bg-green-50 p-4">
-              <p className="text-sm text-slate-500">AI Confidence</p>
-              <h4 className="mt-2 text-2xl font-bold text-green-700">N/A</h4>
-              <p className="mt-1 text-xs text-slate-500">
-                Not provided by current API
+                <div className="rounded-xl bg-green-50 p-4">
+                  <p className="text-sm text-slate-500">Detection Confidence</p>
+                  <h4 className="mt-2 text-2xl font-bold text-green-700">
+                    {aiAnalysis.confidence != null
+                      ? `${(aiAnalysis.confidence * 100).toFixed(2)}%`
+                      : "N/A"}
+                  </h4>
+                </div>
+
+                <div className="rounded-xl bg-orange-50 p-4">
+                  <p className="text-sm text-slate-500">Preliminary Severity</p>
+                  <h4 className="mt-2 text-2xl font-bold text-orange-700 capitalize">
+                    {aiAnalysis.severity || "N/A"}
+                  </h4>
+                </div>
+
+                <div className="rounded-xl bg-purple-50 p-4">
+                  <p className="text-sm text-slate-500">AI Device</p>
+                  <h4 className="mt-2 text-lg font-bold text-purple-700">
+                    {aiAnalysis.device?.toUpperCase() || "N/A"}
+                  </h4>
+                </div>
+              </div>
+
+              {/* Object Detection */}
+              <div className="mt-6">
+                <h4 className="mb-3 font-semibold text-slate-800">
+                  Object Detection (YOLO11)
+                </h4>
+
+                {aiAnalysis.detections?.length > 0 ? (
+                  <div className="space-y-3">
+                    {aiAnalysis.detections.map((detection, index) => (
+                      <div
+                        key={index}
+                        className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                      >
+                        <div className="flex flex-wrap justify-between gap-2">
+                          <span className="font-semibold text-slate-800">
+                            {detection.label}
+                          </span>
+                          <span className="rounded-full bg-blue-100 px-3 py-1 text-sm font-semibold text-blue-700">
+                            {(detection.confidence * 100).toFixed(2)}% confidence
+                          </span>
+                        </div>
+
+                        <p className="mt-2 text-xs text-slate-500">
+                          Model: {detection.model || "Unknown"}
+                        </p>
+
+                        {detection.bbox && (
+                          <p className="mt-1 text-xs text-slate-500">
+                            Bounding box: {detection.bbox.map((value) => value.toFixed(1)).join(", ")}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">
+                    No object detections were returned.
+                  </p>
+                )}
+              </div>
+
+              {/* Image Classification */}
+              {aiAnalysis.classification && (
+                <div className="mt-6 rounded-xl border border-purple-100 bg-purple-50 p-4">
+                  <h4 className="font-semibold text-purple-900">
+                    Image Classification (ResNet18)
+                  </h4>
+
+                  <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-lg font-bold capitalize text-purple-700">
+                      {aiAnalysis.classification.label}
+                    </p>
+
+                    <span className="rounded-full bg-white px-3 py-1 text-sm font-semibold text-purple-700">
+                      {(aiAnalysis.classification.confidence * 100).toFixed(2)}% confidence
+                    </span>
+                  </div>
+
+                  <p className="mt-1 text-xs text-purple-600">
+                    Model: {aiAnalysis.classification.model || "Unknown"}
+                  </p>
+                </div>
+              )}
+
+              {/* Severity Details */}
+              {aiAnalysis.severity_details && (
+                <div className="mt-6 rounded-xl border border-orange-200 bg-orange-50 p-4">
+                  <h4 className="font-semibold text-orange-900">
+                    Severity Assessment Details
+                  </h4>
+
+                  <p className="mt-2 text-sm text-orange-800">
+                    {aiAnalysis.severity_details.basis}
+                  </p>
+
+                  {aiAnalysis.severity_details.warning && (
+                    <div className="mt-3 flex gap-2 rounded-lg bg-white/70 p-3 text-sm text-orange-800">
+                      <AlertTriangle size={18} className="mt-0.5 shrink-0" />
+                      <p>{aiAnalysis.severity_details.warning}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="mt-5 rounded-lg border border-blue-100 bg-blue-50 p-4">
+                <p className="text-sm leading-6 text-blue-800">
+                  <strong>Citizen-reported category:</strong>{" "}
+                  {complaint.category || "N/A"}
+                </p>
+
+                <p className="mt-1 text-sm leading-6 text-blue-800">
+                  <strong>Current authority priority:</strong>{" "}
+                  {complaint.priority || "Not assigned"}
+                </p>
+
+                <p className="mt-2 text-xs text-blue-700">
+                  AI results are decision-support information. Authorities should
+                  independently verify the reported issue before making decisions.
+                </p>
+              </div>
+            </>
+          ) : (
+            <div className="rounded-xl bg-slate-50 p-5">
+              <p className="font-semibold text-slate-700">
+                No saved AI analysis available
+              </p>
+              <p className="mt-1 text-sm text-slate-500">
+                AI analysis has not been completed for this complaint yet.
               </p>
             </div>
-
-            <div className="rounded-xl bg-orange-50 p-4">
-              <p className="text-sm text-slate-500">Severity Score</p>
-              <h4 className="mt-2 text-2xl font-bold text-orange-700">N/A</h4>
-              <p className="mt-1 text-xs text-slate-500">
-                Not provided by current API
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-5 rounded-lg border border-blue-100 bg-blue-50 p-4">
-            <p className="text-sm leading-6 text-blue-800">
-              Current recorded priority:{" "}
-              <strong>{complaint.priority || "Not assigned"}</strong>.
-              AI confidence and severity information are not currently
-              available through the backend API.
-            </p>
-          </div>
+          )}
         </section>
 
         {/* Duplicate Detection */}
@@ -554,9 +933,8 @@ function ComplaintReview() {
             >
               Selected priority: {priority}
             </span>
-            <p className="mt-2 text-xs text-amber-700">
-              Priority selection is not persisted by the current backend
-              integration.
+            <p className="mt-2 text-xs text-green-700">
+              Priority changes are saved to the backend.
             </p>
           </div>
 
@@ -572,30 +950,33 @@ function ComplaintReview() {
               onChange={(e) => {
                 setDepartment(e.target.value);
                 setSaved(false);
+                setActionMessage("");
               }}
-              className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 outline-none focus:border-blue-600"
+              disabled={departmentLoading || departments.length === 0}
+              className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 outline-none focus:border-blue-600 disabled:bg-slate-100"
             >
-              <option value="">Select department</option>
-              <option value="Road Maintenance Department">
-                Road Maintenance Department
+              <option value="" disabled>
+                {departmentLoading
+                  ? "Loading departments..."
+                  : "Select department"}
               </option>
-              <option value="Sanitation Department">
-                Sanitation Department
-              </option>
-              <option value="Electrical Department">
-                Electrical Department
-              </option>
-              <option value="Water Supply Department">
-                Water Supply Department
-              </option>
-              <option value="General Civic Department">
-                General Civic Department
-              </option>
+
+              {departments.map((item) => (
+                <option key={item.id} value={String(item.id)}>
+                  {item.name}
+                </option>
+              ))}
             </select>
 
-            <p className="mt-2 text-xs text-amber-700">
-              Department assignment is not persisted yet.
-            </p>
+            {departmentError ? (
+              <p className="mt-2 text-xs text-red-600">
+                Unable to load departments: {departmentError}
+              </p>
+            ) : (
+              <p className="mt-2 text-xs text-green-700">
+                Department assignments are connected to the backend.
+              </p>
+            )}
           </div>
 
           {/* Status */}
@@ -619,39 +1000,92 @@ function ComplaintReview() {
             </select>
           </div>
 
-          {/* Authority Notes */}
-          <div className="mb-6">
-            <label className="mb-2 block font-semibold text-slate-800">
-              Authority Notes
-            </label>
 
-            <textarea
-              value={authorityNote}
-              onChange={(e) => {
-                setAuthorityNote(e.target.value);
-                setSaved(false);
-              }}
-              rows={4}
-              placeholder="Enter your assessment, priority justification or instructions..."
-              className="w-full resize-none rounded-lg border border-slate-300 px-4 py-3 outline-none focus:border-blue-600"
-            />
+{/* Authority Notes */}
+<div className="mb-6">
+  <label className="mb-2 block font-semibold text-slate-800">
+    Authority Notes
+  </label>
 
-            <p className="mt-2 text-xs text-amber-700">
-              Authority notes are not saved by the current backend API.
+  <textarea
+    value={authorityNote}
+    onChange={(e) => {
+      setAuthorityNote(e.target.value);
+      setSaved(false);
+    }}
+    rows={4}
+    maxLength={2000}
+    placeholder="Enter your assessment, priority justification or instructions..."
+    className="w-full resize-none rounded-lg border border-slate-300 px-4 py-3 outline-none focus:border-blue-600"
+  />
+
+  <p className="mt-2 text-xs text-slate-500">
+    Notes are private to authorized officers and administrators.
+    Maximum 2000 characters.
+  </p>
+
+  <div className="mt-5">
+    <h3 className="mb-3 font-semibold text-slate-800">
+      Previous Authority Notes
+    </h3>
+
+    {notesLoading ? (
+      <p className="text-sm text-slate-500">Loading notes...</p>
+    ) : notesError ? (
+      <p className="text-sm text-red-600">{notesError}</p>
+    ) : authorityNotes.length === 0 ? (
+      <p className="text-sm text-slate-500">
+        No authority notes have been added yet.
+      </p>
+    ) : (
+      <div className="space-y-3">
+        {authorityNotes.map((note) => (
+          <div
+            key={note.id}
+            className="rounded-lg border border-slate-200 bg-slate-50 p-4"
+          >
+            <p className="whitespace-pre-wrap text-sm text-slate-800">
+              {note.message}
+            </p>
+
+            <p className="mt-2 text-xs text-slate-500">
+              Officer ID: {note.officer_id} ·{" "}
+              {new Date(note.created_at).toLocaleString("en-IN", {
+                dateStyle: "medium",
+                timeStyle: "short",
+              })}
             </p>
           </div>
+        ))}
+      </div>
+    )}
+  </div>
+</div>
 
           <button
             type="submit"
-            disabled={saving || status === complaint.status}
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-6 py-3 font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+            disabled={
+              saving ||
+              (
+                priority.toLowerCase() === complaint.priority?.toLowerCase() &&
+                status === complaint.status &&
+                (department === "" ||
+                  department === (
+                    complaint.department_id != null
+                      ? String(complaint.department_id)
+                      : ""
+                  )) &&
+                authorityNote.trim() === ""
+              )
+            }
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-6 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
           >
             {saving ? (
               <Loader2 size={18} className="animate-spin" />
             ) : (
               <Save size={18} />
             )}
-            {saving ? "Updating..." : "Save Status Update"}
+            {saving ? "Saving..." : "Save Changes"}
           </button>
 
           {actionMessage && (
@@ -672,9 +1106,9 @@ function ComplaintReview() {
         <div className="mt-6 rounded-xl border border-blue-100 bg-blue-50 p-4">
           <p className="text-sm leading-6 text-blue-800">
             <strong>Backend integration:</strong> Complaint details,
-            duplicate candidates and status updates are connected to the
-            CivicAI backend. Priority changes, department assignments and
-            authority notes still require backend integration.
+            duplicate detection, priority updates, status updates,
+            department assignments and private authority notes are
+            connected to the CivicAI backend.
           </p>
         </div>
       </main>

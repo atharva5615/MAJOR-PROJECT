@@ -1,0 +1,18 @@
+path: "D:/CivicAI_Datasets/civicai_baseline_11class"
+train: train/images
+val: valid/images
+test: test/images
+
+nc: 11
+names:
+  0: "Broken Road Sign Issues"
+  1: "Damaged Electric wires and poles"
+  2: "Damaged Road issues"
+  3: "Damaged concrete structures"
+  4: "Dead Animal Pollution"
+  5: "Fallen trees"
+  6: "Littering-Garbage on Public Places"
+  7: "Pothole Issues"
+  8: "Vandalism Issues"
+  9: "Road cracks"
+  10: "Road surface damage"

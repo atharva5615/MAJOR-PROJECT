@@ -35,3 +35,13 @@ temp/
 
 # Logs
 *.log
+ai-engine/.venv_backup_py314_broken/
+
+_ai_handover_review/
+
+# CivicAI trained models (include in Git)
+!ai-engine/classification/runs/resnet18_v1/best_model.pth
+!runs/detect/runs/civicai/yolo11n_11class_v1-5/weights/best.pt
+
+# Local backup files
+backend/app/routes/ai.py.backup
