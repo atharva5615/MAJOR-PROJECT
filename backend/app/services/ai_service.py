@@ -1,14 +1,19 @@
-﻿import json
+import json
 import os
+from pathlib import Path
+from dotenv import load_dotenv
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from schemas.ai import AIAnalysisResponse
 
 
+ENV_PATH = Path(__file__).resolve().parents[2] / ".env"
+load_dotenv(ENV_PATH)
+
 AI_SERVICE_URL = os.getenv(
     "CIVICAI_AI_SERVICE_URL",
-    "http://127.0.0.1:8001"
+    "http://127.0.0.1:8000"
 ).rstrip("/")
 
 AI_TIMEOUT_SECONDS = float(

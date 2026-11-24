@@ -1,11 +1,20 @@
 ﻿import torch
 import torch.nn as nn
 from torchvision import models
+from pathlib import Path
 
 print("1. Creating ResNet18...", flush=True)
 
+MODEL_PATH = (
+    Path(__file__).resolve().parent
+    / "classification"
+    / "runs"
+    / "resnet18_v1"
+    / "best_model.pth"
+)
+
 checkpoint = torch.load(
-    r".\classification\runs\resnet18_v1\best_model.pth",
+    MODEL_PATH,
     map_location="cpu",
     weights_only=True
 )

@@ -1,4 +1,4 @@
-﻿from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field
 
 
 class AIDetection(BaseModel):
@@ -17,7 +17,7 @@ class AIClassification(BaseModel):
 
 
 class AISeverityDetails(BaseModel):
-    severity: str
+    severity: str | None = None
     basis: str | None = None
     warning: str | None = None
 
