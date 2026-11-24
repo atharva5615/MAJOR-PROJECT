@@ -33,12 +33,12 @@ function ComplaintDetails() {
     const baseURL =
       api.defaults.baseURL ||
       import.meta.env.VITE_API_BASE_URL ||
-      "http://localhost:8000/api/v1";
+      "http://localhost:8001/api/v1";
 
     try {
       return new URL(baseURL, window.location.origin).origin;
     } catch {
-      return "http://localhost:8000";
+      return "http://localhost:8001";
     }
   }, []);
 
