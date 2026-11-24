@@ -1,47 +1,79 @@
-# Environment variables
+
+# ==========================================
+# Environment variables and secrets
+# ==========================================
 .env
 .env.*
 !.env.example
 
+# ==========================================
 # Python
+# ==========================================
 __pycache__/
 *.py[cod]
 venv/
 .venv/
 .pytest_cache/
 
-# Node
+# ==========================================
+# Node.js
+# ==========================================
 node_modules/
 dist/
 
-# IDE
+# ==========================================
+# IDE and operating system
+# ==========================================
 .vscode/
 .idea/
-
-# Operating system
 .DS_Store
 Thumbs.db
 
-# AI model weights
+# ==========================================
+# AI model weights - ignore by default
+# ==========================================
 *.pt
 *.onnx
 *.pth
 
-# Datasets and temporary uploads
+# ==========================================
+# Datasets
+# ==========================================
 ai-engine/datasets/*
 !ai-engine/datasets/.gitkeep
+
+# ==========================================
+# Uploads and temporary files
+# ==========================================
 uploads/
 temp/
 
-# Logs
+# Include CivicAI complaint images
+!backend/uploads/
+!backend/uploads/**
+
+# ==========================================
+# Logs and local environments
+# ==========================================
 *.log
 ai-engine/.venv_backup_py314_broken/
 
+# ==========================================
+# Local review and backup files
+# ==========================================
 _ai_handover_review/
+backend/app/routes/ai.py.backup
 
-# CivicAI trained models (include in Git)
+# Exclude older pre-migration database backup
+civicai_db_before_develop_migrations.backup
+
+# ==========================================
+# Include trained CivicAI models
+# ==========================================
 !ai-engine/classification/runs/resnet18_v1/best_model.pth
 !runs/detect/runs/civicai/yolo11n_11class_v1-5/weights/best.pt
 
-# Local backup files
-backend/app/routes/ai.py.backup
+# ==========================================
+# Include latest complete PostgreSQL backup
+# ==========================================
+!civicai_db_full.backup
