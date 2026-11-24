@@ -73,9 +73,6 @@ function ComplaintDetails() {
 
     if (id) {
       fetchComplaint();
-    } else {
-      setError("No complaint ID was provided.");
-      setLoading(false);
     }
 
     return () => {
@@ -202,19 +199,13 @@ function ComplaintDetails() {
     });
   };
 
-  const imageUrl = useMemo(() => {
-    if (!complaint?.image_url) return "";
+  const imagePath = complaint?.image_url;
 
-    if (/^https?:\/\//i.test(complaint.image_url)) {
-      return complaint.image_url;
-    }
-
-    const path = complaint.image_url.startsWith("/")
-      ? complaint.image_url
-      : `/${complaint.image_url}`;
-
-    return `${apiOrigin}${path}`;
-  }, [complaint?.image_url, apiOrigin]);
+  const imageUrl = !imagePath
+    ? ""
+    : /^https?:\/\//i.test(imagePath)
+      ? imagePath
+      : `${apiOrigin}${imagePath.startsWith("/") ? "" : "/"}${imagePath}`;
 
   const status = (complaint?.status || "reported").toLowerCase();
   const statusLabel = {
@@ -252,7 +243,7 @@ function ComplaintDetails() {
     },
   ];
 
-  if (loading) {
+  if (id && loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-50 px-5">
         <div className="flex items-center gap-3 text-slate-600">
@@ -263,7 +254,7 @@ function ComplaintDetails() {
     );
   }
 
-  if (error || !complaint) {
+  if (!id || error || !complaint) {
     return (
       <div className="min-h-screen bg-slate-50 px-5 py-10">
         <div className="mx-auto max-w-3xl rounded-2xl border border-red-200 bg-white p-6 shadow-sm">
@@ -271,7 +262,9 @@ function ComplaintDetails() {
             <AlertCircle size={22} className="mt-0.5 shrink-0" />
             <div>
               <h2 className="font-semibold">Unable to open complaint</h2>
-              <p className="mt-2 text-sm">{error || "Complaint not found."}</p>
+              <p className="mt-2 text-sm">{!id
+                                            ? "No complaint ID was provided."
+                                            : error || "Complaint not found."}</p>
             </div>
           </div>
           <Link

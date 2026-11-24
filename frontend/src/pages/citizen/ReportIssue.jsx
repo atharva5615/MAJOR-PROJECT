@@ -12,6 +12,7 @@ import {
   CheckCircle,
 } from "lucide-react";
 import api from "../../services/api";
+import LocationPickerMap from "./LocationPickerMap";
 
 function ReportIssue() {
   const [formData, setFormData] = useState({
@@ -25,6 +26,7 @@ function ReportIssue() {
   const [preview, setPreview] = useState(null);
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationError, setLocationError] = useState("");
+  const [locationAccuracy, setLocationAccuracy] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [createdIssueId, setCreatedIssueId] = useState(null);
@@ -46,6 +48,10 @@ function ReportIssue() {
   // Handle text and select inputs.
   const handleChange = (e) => {
     const { name, value } = e.target;
+
+    if (name === "latitude" || name === "longitude") {
+      setLocationAccuracy(null);
+    }
 
     setFormData((previous) => ({
       ...previous,
@@ -104,6 +110,13 @@ function ReportIssue() {
           latitude: position.coords.latitude.toFixed(6),
           longitude: position.coords.longitude.toFixed(6),
         }));
+
+        setLocationAccuracy(
+          Number.isFinite(position.coords.accuracy)
+            ? position.coords.accuracy
+            : null
+        );
+
         setLocationLoading(false);
       },
       (error) => {
@@ -126,6 +139,20 @@ function ReportIssue() {
         maximumAge: 0,
       }
     );
+  };
+
+
+  // Update coordinates when the citizen selects a location on the map.
+  const handleMapLocationChange = (latitude, longitude) => {
+    setFormData((previous) => ({
+      ...previous,
+      latitude: latitude.toFixed(6),
+      longitude: longitude.toFixed(6),
+    }));
+
+    // A manually selected map position is not a fresh GPS reading.
+    setLocationAccuracy(null);
+    setLocationError("");
   };
 
   const uploadIssueImage = async (issueId) => {
@@ -374,6 +401,52 @@ function ReportIssue() {
               )}
             </button>
 
+                        {locationAccuracy !== null && (
+              <div
+                className={`mt-3 rounded-lg border p-4 ${
+                  locationAccuracy <= 10
+                    ? "border-green-200 bg-green-50"
+                    : locationAccuracy <= 30
+                    ? "border-emerald-200 bg-emerald-50"
+                    : locationAccuracy <= 100
+                    ? "border-amber-200 bg-amber-50"
+                    : "border-red-200 bg-red-50"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm font-medium text-slate-700">
+                    Estimated GPS accuracy
+                  </span>
+
+                  <span className="font-bold text-slate-900">
+                    ± {locationAccuracy.toFixed(1)} metres
+                  </span>
+                </div>
+
+                <p className="mt-2 text-sm font-semibold">
+                  {locationAccuracy <= 10
+                    ? "High accuracy"
+                    : locationAccuracy <= 30
+                    ? "Good accuracy"
+                    : locationAccuracy <= 100
+                    ? "Approximate location"
+                    : "Poor location accuracy"}
+                </p>
+
+                {locationAccuracy > 30 && (
+                  <p className="mt-1 text-xs text-slate-600">
+                    Your location may be imprecise. Try detecting your
+                    location outdoors or adjust the coordinates manually.
+                  </p>
+                )}
+
+                <p className="mt-2 text-xs text-slate-500">
+                  This is the device's estimated horizontal accuracy,
+                  not a guarantee of the exact issue location.
+                </p>
+              </div>
+            )}
+
             {locationError && (
               <p className="mt-3 flex items-start gap-2 text-sm text-red-600">
                 <AlertCircle size={17} className="mt-0.5 shrink-0" />
@@ -420,6 +493,13 @@ function ReportIssue() {
                 />
               </div>
             </div>
+
+            <LocationPickerMap
+              latitude={formData.latitude}
+              longitude={formData.longitude}
+              onLocationChange={handleMapLocationChange}
+              disabled={submitting || Boolean(createdIssueId)}
+            />
 
             <p className="mt-3 text-xs text-slate-500">
               You can detect your GPS coordinates or enter them manually.
