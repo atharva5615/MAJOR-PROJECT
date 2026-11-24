@@ -5,9 +5,7 @@ import {
   BrainCircuit,
   ClipboardList,
   ArrowRight,
-  ShieldCheck,
-  Users,
-  Activity
+  ShieldCheck
 } from "lucide-react";
 
 function App() {
