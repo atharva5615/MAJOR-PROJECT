@@ -12,6 +12,7 @@ from fastapi import (
     Query
 )
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from geoalchemy2.elements import WKTElement
 
 from database.db_connection import get_db
@@ -30,6 +31,7 @@ from models import (
 from schemas.issue import (
     CivicIssueCreate,
     CivicIssueResponse,
+    AdminCivicIssueResponse,
     CivicIssueUploadResponse,
     IssuePriorityUpdate,
     AuthorityNoteCreate,
@@ -198,7 +200,7 @@ def get_my_issues(
 
 @router.get(
     "/",
-    response_model=list[CivicIssueResponse]
+    response_model=list[AdminCivicIssueResponse]
 )
 def get_all_issues(
     issue_status: str | None = Query(
@@ -245,9 +247,79 @@ def get_all_issues(
             (CivicIssue.description.ilike(search_term))
         )
 
-    return query.order_by(
+    # Fetch the requested complaint page.
+    issues = query.order_by(
         CivicIssue.created_at.desc()
     ).offset(skip).limit(limit).all()
+
+    issue_ids = [issue.id for issue in issues]
+
+    # Prepare an empty duplicate-review list for each complaint.
+    reviews_by_issue = {
+        issue_id: [] for issue_id in issue_ids
+    }
+
+    if issue_ids:
+        # Fetch relevant reviews in one database query.
+        reviews = db.query(DuplicateReview).filter(
+            or_(
+                DuplicateReview.original_issue_id.in_(issue_ids),
+                DuplicateReview.duplicate_issue_id.in_(issue_ids)
+            )
+        ).order_by(
+            DuplicateReview.created_at.desc(),
+            DuplicateReview.id.desc()
+        ).all()
+
+        # Keep only the latest review for each complaint pair.
+        seen_pairs = set()
+
+        for review in reviews:
+            pair_key = tuple(sorted((
+                review.original_issue_id,
+                review.duplicate_issue_id
+            )))
+
+            if pair_key in seen_pairs:
+                continue
+
+            seen_pairs.add(pair_key)
+
+            # Attach the relationship to the original complaint.
+            if review.original_issue_id in reviews_by_issue:
+                reviews_by_issue[
+                    review.original_issue_id
+                ].append({
+                    "related_issue_id": review.duplicate_issue_id,
+                    "decision": review.decision,
+                    "reviewed_at": review.created_at
+                })
+
+            # Attach the same relationship to the other complaint.
+            if review.duplicate_issue_id in reviews_by_issue:
+                reviews_by_issue[
+                    review.duplicate_issue_id
+                ].append({
+                    "related_issue_id": review.original_issue_id,
+                    "decision": review.decision,
+                    "reviewed_at": review.created_at
+                })
+
+    # Construct the Admin-specific response.
+    results = []
+
+    for issue in issues:
+        issue_data = CivicIssueResponse.model_validate(
+            issue
+        ).model_dump()
+
+        issue_data["duplicate_reviews"] = reviews_by_issue[issue.id]
+
+        results.append(
+            AdminCivicIssueResponse.model_validate(issue_data)
+        )
+
+    return results
 
 
 # --------------------------------------------------

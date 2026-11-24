@@ -7,7 +7,6 @@ import {
   CheckCircle,
   XCircle,
   MapPin,
-  Camera,
   BrainCircuit,
   FileText,
   LoaderCircle,
@@ -25,6 +24,9 @@ function DuplicateReview() {
   const [decision, setDecision] = useState({});
   const [authorityNote, setAuthorityNote] = useState({});
   const [savingCandidate, setSavingCandidate] = useState(null);
+  const [savedAuthorityNote, setSavedAuthorityNote] = useState({});
+  const [reevaluatingCandidate, setReevaluatingCandidate] = useState({});
+  const [confirmation, setConfirmation] = useState(null);
   const [reviewErrors, setReviewErrors] = useState({});
   const [reviewSuccess, setReviewSuccess] = useState({});
 
@@ -68,6 +70,7 @@ function DuplicateReview() {
 
         setDecision(savedDecisions);
         setAuthorityNote(savedNotes);
+        setSavedAuthorityNote(savedNotes);
 
         const details = await Promise.all(
           matches.map(async (candidate) => {
@@ -116,7 +119,36 @@ function DuplicateReview() {
   }, [id]);
 
 
-  const handleDecision = async (candidateId, value) => {
+  // Request a decision and show a confirmation dialog.
+  const requestDecision = (candidateId, value) => {
+    const isReevaluation =
+      Boolean(decision[candidateId] && reevaluatingCandidate[candidateId]);
+
+    // Require an explanation when changing an existing decision.
+    if (
+      isReevaluation &&
+      !authorityNote[candidateId]?.trim()
+    ) {
+      setReviewErrors((previous) => ({
+        ...previous,
+        [candidateId]: "Please provide a reason for changing the decision.",
+      }));
+      return;
+    }
+
+    setConfirmation({
+      candidateId,
+      decision: value,
+      isReevaluation,
+    });
+  };
+
+  // Save the decision only after confirmation.
+  const saveConfirmedDecision = async () => {
+    if (!confirmation) return;
+
+    const { candidateId, decision: value } = confirmation;
+
     setSavingCandidate(candidateId);
 
     setReviewErrors((previous) => ({
@@ -134,7 +166,7 @@ function DuplicateReview() {
         `/issues/${id}/duplicates/${candidateId}/review`,
         {
           decision: value,
-          authority_note: authorityNote[candidateId] || null,
+          authority_note: authorityNote[candidateId]?.trim() || null,
         }
       );
 
@@ -143,11 +175,27 @@ function DuplicateReview() {
         [candidateId]: response.data.decision,
       }));
 
+      const savedNote = authorityNote[candidateId]?.trim() || "";
+
+      setSavedAuthorityNote((previous) => ({
+        ...previous,
+        [candidateId]: savedNote,
+      }));
+
+      setReevaluatingCandidate((previous) => ({
+        ...previous,
+        [candidateId]: false,
+      }));
+
       setReviewSuccess((previous) => ({
         ...previous,
         [candidateId]: "Decision successfully saved to the database.",
       }));
+
+      setConfirmation(null);
     } catch (err) {
+      setConfirmation(null);
+
       setReviewErrors((previous) => ({
         ...previous,
         [candidateId]:
@@ -157,6 +205,47 @@ function DuplicateReview() {
     } finally {
       setSavingCandidate(null);
     }
+  };
+
+  // Enter re-evaluation mode.
+  const beginReevaluation = (candidateId) => {
+    setAuthorityNote((previous) => ({
+      ...previous,
+      [candidateId]: savedAuthorityNote[candidateId] || "",
+    }));
+
+    setReviewErrors((previous) => ({
+      ...previous,
+      [candidateId]: "",
+    }));
+
+    setReviewSuccess((previous) => ({
+      ...previous,
+      [candidateId]: "",
+    }));
+
+    setReevaluatingCandidate((previous) => ({
+      ...previous,
+      [candidateId]: true,
+    }));
+  };
+
+  // Cancel re-evaluation and restore the previously saved note.
+  const cancelReevaluation = (candidateId) => {
+    setAuthorityNote((previous) => ({
+      ...previous,
+      [candidateId]: savedAuthorityNote[candidateId] || "",
+    }));
+
+    setReevaluatingCandidate((previous) => ({
+      ...previous,
+      [candidateId]: false,
+    }));
+
+    setReviewErrors((previous) => ({
+      ...previous,
+      [candidateId]: "",
+    }));
   };
 
 
@@ -396,61 +485,113 @@ function DuplicateReview() {
               )}
 
               <div className="mt-6 border-t border-slate-100 pt-5">
-                <label className="mb-2 block font-semibold text-slate-800">
-                  Verification Notes
-                </label>
+                {decision[candidateId] &&
+                !reevaluatingCandidate[candidateId] ? (
+                  <>
+                    {/* Locked saved decision */}
+                    <div className="flex items-center justify-between gap-3">
+                      <label className="font-semibold text-slate-800">
+                        Saved Verification Decision
+                      </label>
 
-                <textarea
-                  value={authorityNote[candidateId] || ""}
-                  onChange={(event) =>
-                    setAuthorityNote((previous) => ({
-                      ...previous,
-                      [candidateId]: event.target.value,
-                    }))
-                  }
-                  rows={3}
-                  maxLength={2000}
-                  placeholder="Explain your assessment..."
-                  className="w-full resize-none rounded-lg border border-slate-300 px-4 py-3 outline-none focus:border-blue-600"
-                />
+                      <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
+                        Saved
+                      </span>
+                    </div>
 
-                <div className="mt-4 flex flex-wrap gap-3">
-                  <button
-                    onClick={() => handleDecision(candidateId, "confirmed")}
-                    disabled={savingCandidate === candidateId}
-                    className="flex items-center gap-2 rounded-lg bg-green-600 px-5 py-3 font-semibold text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <CheckCircle size={18} />
-                    {savingCandidate === candidateId
-                      ? "Saving..."
-                      : decision[candidateId] === "confirmed"
-                        ? "Confirm Again"
-                        : "Confirm Duplicate"}
-                  </button>
+                    <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                      <p className="font-semibold text-slate-900">
+                        {decision[candidateId] === "confirmed"
+                          ? "Confirmed Duplicate"
+                          : "Rejected Duplicate"}
+                      </p>
 
-                  <button
-                    onClick={() => handleDecision(candidateId, "rejected")}
-                    disabled={savingCandidate === candidateId}
-                    className="flex items-center gap-2 rounded-lg bg-red-600 px-5 py-3 font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <XCircle size={18} />
-                    {savingCandidate === candidateId
-                      ? "Saving..."
-                      : decision[candidateId] === "rejected"
-                        ? "Reject Again"
-                        : "Reject Duplicate"}
-                  </button>
-                </div>
+                      <p className="mt-2 text-sm text-slate-600">
+                        {savedAuthorityNote[candidateId] ||
+                          "No authority note was provided."}
+                      </p>
 
-                {decision[candidateId] && (
-                  <p className="mt-4 rounded-lg bg-blue-50 p-4 text-sm text-blue-800">
-                    Current saved decision:{" "}
-                    <strong>
-                      {decision[candidateId] === "confirmed"
-                        ? "Confirmed Duplicate"
-                        : "Rejected Duplicate"}
-                    </strong>
-                  </p>
+                      <p className="mt-3 text-xs text-slate-500">
+                        This decision has been saved to the database.
+                        The review controls are locked.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => beginReevaluation(candidateId)}
+                      className="mt-4 flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-5 py-3 font-semibold text-blue-700 hover:bg-blue-100"
+                    >
+                      Re-evaluate Decision
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    {/* Editable initial review or re-evaluation */}
+                    <label className="mb-2 block font-semibold text-slate-800">
+                      {reevaluatingCandidate[candidateId]
+                        ? "Re-evaluation Notes"
+                        : "Verification Notes"}
+                    </label>
+
+                    {reevaluatingCandidate[candidateId] && (
+                      <p className="mb-3 text-sm text-blue-700">
+                        You are re-evaluating a previously saved decision.
+                        Please explain the reason for this new review.
+                      </p>
+                    )}
+
+                    <textarea
+                      value={authorityNote[candidateId] || ""}
+                      onChange={(event) =>
+                        setAuthorityNote((previous) => ({
+                          ...previous,
+                          [candidateId]: event.target.value,
+                        }))
+                      }
+                      rows={3}
+                      maxLength={2000}
+                      placeholder="Explain your assessment..."
+                      className="w-full resize-none rounded-lg border border-slate-300 px-4 py-3 outline-none focus:border-blue-600"
+                    />
+
+                    <div className="mt-4 flex flex-wrap gap-3">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          requestDecision(candidateId, "confirmed")
+                        }
+                        disabled={savingCandidate === candidateId}
+                        className="flex items-center gap-2 rounded-lg bg-green-600 px-5 py-3 font-semibold text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <CheckCircle size={18} />
+                        Confirm Duplicate
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          requestDecision(candidateId, "rejected")
+                        }
+                        disabled={savingCandidate === candidateId}
+                        className="flex items-center gap-2 rounded-lg bg-red-600 px-5 py-3 font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <XCircle size={18} />
+                        Reject Duplicate
+                      </button>
+
+                      {reevaluatingCandidate[candidateId] && (
+                        <button
+                          type="button"
+                          onClick={() => cancelReevaluation(candidateId)}
+                          disabled={savingCandidate === candidateId}
+                          className="rounded-lg border border-slate-300 px-5 py-3 font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                        >
+                          Cancel
+                        </button>
+                      )}
+                    </div>
+                  </>
                 )}
 
                 {reviewSuccess[candidateId] && (
@@ -468,6 +609,80 @@ function DuplicateReview() {
             </section>
           );
         })}
+
+                {/* Decision confirmation dialog */}
+        {confirmation && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="confirmation-title"
+              className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl"
+            >
+              <div className="mb-4 flex items-center gap-3">
+                <AlertTriangle
+                  size={25}
+                  className="text-amber-500"
+                />
+
+                <h2
+                  id="confirmation-title"
+                  className="text-xl font-bold text-slate-900"
+                >
+                  {confirmation.isReevaluation
+                    ? "Confirm Revised Decision"
+                    : "Confirm Your Decision"}
+                </h2>
+              </div>
+
+              <p className="text-sm leading-6 text-slate-600">
+                Are you sure you want to{" "}
+                <strong>
+                  {confirmation.decision === "confirmed"
+                    ? "confirm these complaints as duplicates"
+                    : "reject this potential duplicate"}
+                </strong>
+                ?
+              </p>
+
+              {confirmation.isReevaluation && (
+                <p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
+                  This will create a new review-history entry.
+                  Your previous decision will remain preserved
+                  for auditing.
+                </p>
+              )}
+
+              <div className="mt-6 flex flex-wrap justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setConfirmation(null)}
+                  disabled={savingCandidate !== null}
+                  className="rounded-lg border border-slate-300 px-5 py-2.5 font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="button"
+                  onClick={saveConfirmedDecision}
+                  disabled={savingCandidate !== null}
+                  className={`rounded-lg px-5 py-2.5 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 ${
+                    confirmation.decision === "confirmed"
+                      ? "bg-green-600 hover:bg-green-700"
+                      : "bg-red-600 hover:bg-red-700"
+                  }`}
+                >
+                  {savingCandidate !== null
+                    ? "Saving..."
+                    : confirmation.isReevaluation
+                    ? "Save Revised Decision"
+                    : "Confirm and Save"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="rounded-xl border border-blue-100 bg-blue-50 p-4">
           <p className="text-sm leading-6 text-blue-800">

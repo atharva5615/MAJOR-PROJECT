@@ -114,6 +114,17 @@ class CivicIssueResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+class AdminDuplicateReviewSummary(BaseModel):
+    related_issue_id: int
+    decision: str
+    reviewed_at: datetime
+
+
+class AdminCivicIssueResponse(CivicIssueResponse):
+    duplicate_reviews: list[AdminDuplicateReviewSummary] = Field(
+        default_factory=list
+    )
+
 class DuplicateCandidateResponse(BaseModel):
     issue_id: int
     gps_distance_metres: float

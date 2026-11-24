@@ -512,7 +512,7 @@ function AdminDashboard() {
             {/* Complaints Table */}
             {!loading && !error && (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[850px] text-left">
+                <table className="w-full min-w-[1050px] text-left">
 
                   <thead className="bg-slate-50 text-xs uppercase text-slate-500">
                     <tr>
@@ -521,6 +521,7 @@ function AdminDashboard() {
                       <th className="px-6 py-4">Priority</th>
                       <th className="px-6 py-4">AI Score</th>
                       <th className="px-6 py-4">Status</th>
+                      <th className="px-6 py-4">Duplicate Review</th>
                       <th className="px-6 py-4">Action</th>
                     </tr>
                   </thead>
@@ -570,6 +571,53 @@ function AdminDashboard() {
                         </td>
 
                         <td className="px-6 py-4">
+                          {complaint.duplicate_reviews?.length > 0 ? (
+                            <div className="space-y-2">
+                              {complaint.duplicate_reviews.map((review) => (
+                                <div
+                                  key={review.related_issue_id}
+                                  className="flex flex-col items-start gap-2"
+                                >
+                                  <span
+                                    className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                                      review.decision === "confirmed"
+                                        ? "bg-green-100 text-green-700"
+                                        : review.decision === "rejected"
+                                        ? "bg-red-100 text-red-700"
+                                        : "bg-slate-100 text-slate-700"
+                                    }`}
+                                  >
+                                    {review.decision === "confirmed"
+                                      ? "Confirmed Duplicate"
+                                      : review.decision === "rejected"
+                                      ? "Rejected Match"
+                                      : "Unknown Decision"}
+                                  </span>
+
+                                  <Link
+                                    to={`/admin/complaints/${review.related_issue_id}`}
+                                    className="text-xs font-medium text-blue-600 hover:underline"
+                                  >
+                                    Related Complaint #{review.related_issue_id}
+                                  </Link>
+
+                                  {review.reviewed_at && (
+                                    <span className="text-xs text-slate-400">
+                                      Reviewed:{" "}
+                                      {new Date(review.reviewed_at).toLocaleDateString()}
+                                    </span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-slate-400">
+                              No review recorded
+                            </span>
+                          )}
+                        </td>
+
+                        <td className="px-6 py-4">
                           <Link
                             to={`/admin/complaints/${complaint.id}`}
                             className="flex items-center gap-2 rounded-lg border border-blue-600 px-3 py-2 text-sm font-semibold text-blue-600 hover:bg-blue-50"
@@ -585,7 +633,7 @@ function AdminDashboard() {
                     {filteredComplaints.length === 0 && (
                       <tr>
                         <td
-                          colSpan="6"
+                          colSpan="7"
                           className="px-6 py-12 text-center text-slate-500"
                         >
                           No complaints found.

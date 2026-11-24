@@ -249,9 +249,6 @@ function ComplaintReview() {
 
     if (id) {
       fetchComplaint();
-    } else {
-      setError("Complaint ID is missing.");
-      setLoading(false);
     }
 
     return () => {
@@ -292,7 +289,6 @@ function ComplaintReview() {
       active = false;
     };
   }, [id]);
-
 
 const handleSave = async (e) => {
     e.preventDefault();
@@ -470,7 +466,7 @@ const handleSave = async (e) => {
   };
 
 
-  if (loading) {
+  if (loading && id) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-100">
         <div className="text-center">
@@ -481,7 +477,7 @@ const handleSave = async (e) => {
     );
   }
 
-  if (error || !complaint) {
+  if (!id || error || !complaint) {
     return (
       <div className="min-h-screen bg-slate-100 p-6">
         <div className="mx-auto max-w-3xl rounded-xl border border-red-200 bg-white p-6">
@@ -489,7 +485,7 @@ const handleSave = async (e) => {
             Unable to load complaint
           </h2>
           <p className="mt-2 text-slate-600">
-            {error || "Complaint not found."}
+            {!id ? "Complaint ID is missing." : error || "Complaint not found."}
           </p>
           <Link
             to="/admin/dashboard"
