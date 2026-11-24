@@ -30,3 +30,23 @@ class DashboardOverview(BaseModel):
     monthly_trend: list[MonthlyStat]
 
     model_config = ConfigDict(from_attributes=True)
+
+class DashboardMapPoint(BaseModel):
+    id: int
+    title: str
+    category: str
+    priority: str
+    status: str
+    latitude: float
+    longitude: float
+    address: str | None = None
+    image_url: str | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DashboardGeospatialResponse(BaseModel):
+    total_issues: int = Field(ge=0)
+    mapped_issues: int = Field(ge=0)
+    unmapped_issues: int = Field(ge=0)
+    points: list[DashboardMapPoint]

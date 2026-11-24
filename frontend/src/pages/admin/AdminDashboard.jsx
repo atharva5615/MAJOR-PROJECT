@@ -18,6 +18,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import api from "../../services/api";
+import AdminComplaintMap from "./AdminComplaintMap";
 
 function AdminDashboard() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -430,6 +431,8 @@ function AdminDashboard() {
             </div>
 
           </section>
+
+          <AdminComplaintMap />
 
           {/* Complaint Management */}
           <section

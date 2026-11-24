@@ -8,7 +8,10 @@ from sqlalchemy import func, text
 from database.db_connection import get_db
 from models import CivicIssue, Department, User
 from routes.auth import get_current_user
-from schemas.dashboard import DashboardOverview
+from schemas.dashboard import (
+    DashboardOverview,
+    DashboardGeospatialResponse,
+)
 
 
 router = APIRouter(
@@ -182,4 +185,65 @@ def get_dashboard_overview(
         "category_breakdown": category_breakdown,
         "department_breakdown": department_breakdown,
         "monthly_trend": monthly_trend
+    }
+
+# --------------------------------------------------
+# GEOSPATIAL COMPLAINT DATA
+# --------------------------------------------------
+
+@router.get(
+    "/geospatial",
+    response_model=DashboardGeospatialResponse
+)
+def get_dashboard_geospatial(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    require_dashboard_access(current_user)
+
+    total_issues = db.query(
+        func.count(CivicIssue.id)
+    ).scalar() or 0
+
+    mapped_issues = db.query(
+        CivicIssue.id,
+        CivicIssue.title,
+        CivicIssue.category,
+        CivicIssue.priority,
+        CivicIssue.status,
+        CivicIssue.latitude,
+        CivicIssue.longitude,
+        CivicIssue.address,
+        CivicIssue.image_url,
+    ).filter(
+        CivicIssue.latitude.isnot(None),
+        CivicIssue.longitude.isnot(None),
+        CivicIssue.latitude.between(-90, 90),
+        CivicIssue.longitude.between(-180, 180),
+    ).order_by(
+        CivicIssue.created_at.desc()
+    ).all()
+
+    points = [
+        {
+            "id": issue.id,
+            "title": issue.title,
+            "category": issue.category,
+            "priority": issue.priority,
+            "status": issue.status,
+            "latitude": issue.latitude,
+            "longitude": issue.longitude,
+            "address": issue.address,
+            "image_url": issue.image_url,
+        }
+        for issue in mapped_issues
+    ]
+
+    mapped_count = len(points)
+
+    return {
+        "total_issues": total_issues,
+        "mapped_issues": mapped_count,
+        "unmapped_issues": total_issues - mapped_count,
+        "points": points,
     }
